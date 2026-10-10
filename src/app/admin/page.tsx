@@ -6,8 +6,9 @@ import { unzipSync } from "fflate";
 import { 
   Package, Upload, FileSpreadsheet, Save, 
   Trash2, Edit2, Plus, DollarSign, TrendingUp, 
-  ShoppingBag, X, BarChart3, Loader2, Image as ImageIcon, Lock, LogOut, Search, RefreshCw, Layers, Images
+  X, BarChart3, Loader2, Image as ImageIcon, Lock, LogOut, Search, Layers, Images, Settings, Megaphone, KeyRound, ExternalLink
 } from "lucide-react";
+import { CATEGORY_TREE, categoryLabel } from "@/lib/categories";
 
 type Product = {
   id: string;
@@ -72,7 +73,7 @@ function compressImage(dataUrl: string, maxSize = 900, quality = 0.82): Promise<
 }
 
 // Extrae las imágenes incrustadas en un .xlsx y las asigna a cada fila de producto
-async function extractImagesFromWorkbook(arrayBuffer: ArrayBuffer, json: Record<string, any>[]): Promise<{ json: Record<string, any>[]; extracted: number }> {
+async function extractImagesFromWorkbook(arrayBuffer: ArrayBuffer, json: Record<string, unknown>[]): Promise<{ json: Record<string, unknown>[]; extracted: number }> {
   try {
     const files = unzipSync(new Uint8Array(arrayBuffer));
 
@@ -161,10 +162,19 @@ async function extractImagesFromWorkbook(arrayBuffer: ArrayBuffer, json: Record<
 
 export default function AdminDashboard() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [usernameInput, setUsernameInput] = useState("");
   const [passwordInput, setPasswordInput] = useState("");
   const [authError, setAuthError] = useState("");
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [currentUser, setCurrentUser] = useState("");
 
-  const [activeTab, setActiveTab] = useState<'products' | 'finance' | 'categories'>('products');
+  const [activeTab, setActiveTab] = useState<'products' | 'finance' | 'categories' | 'settings'>('products');
+
+  // Ajustes: aviso de la tienda y contraseña
+  const [notice, setNotice] = useState("");
+  const [noticeStatus, setNoticeStatus] = useState("");
+  const [passwordForm, setPasswordForm] = useState({ current: "", next: "", repeat: "" });
+  const [passwordStatus, setPasswordStatus] = useState<{ ok: boolean; text: string } | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<{id: string, name: string, slug: string}[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -199,6 +209,7 @@ export default function AdminDashboard() {
       const data = await res.json();
       if (res.ok && data.authenticated) {
         setIsAuthenticated(true);
+        setCurrentUser(data.username || "");
         fetchProducts();
       } else {
         setIsAuthenticated(false);
@@ -213,21 +224,26 @@ export default function AdminDashboard() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError("");
+    setIsLoggingIn(true);
     try {
       const res = await fetch('/api/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: passwordInput })
+        body: JSON.stringify({ username: usernameInput, password: passwordInput })
       });
       const data = await res.json();
       if (res.ok && data.success) {
         setIsAuthenticated(true);
+        setCurrentUser(data.username || usernameInput);
+        setPasswordInput("");
         fetchProducts();
       } else {
-        setAuthError(data.error || "Contraseña incorrecta");
+        setAuthError(data.error || "Usuario o contraseña incorrectos");
       }
     } catch {
       setAuthError("Error al iniciar sesión");
+    } finally {
+      setIsLoggingIn(false);
     }
   };
 
@@ -241,12 +257,14 @@ export default function AdminDashboard() {
   const fetchProducts = async () => {
     setIsLoading(true);
     try {
-      const [resProd, resCat] = await Promise.all([
+      const [resProd, resCat, resSettings] = await Promise.all([
         fetch('/api/products'),
-        fetch('/api/categories')
+        fetch('/api/categories'),
+        fetch('/api/settings')
       ]);
       if (resProd.ok) setProducts(await resProd.json());
       if (resCat.ok) setCategories(await resCat.json());
+      if (resSettings.ok) setNotice((await resSettings.json()).notice || "");
     } catch (err) {
       console.error(err);
     } finally {
@@ -254,21 +272,42 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleAutoCategorize = async () => {
-    if (!confirm('¿Quieres asignar categorías automáticamente a todos tus productos? Esto modificará la categoría de los productos.')) return;
-    setIsLoading(true);
+  const handleSaveNotice = async (value: string) => {
+    setNoticeStatus("Guardando...");
     try {
-      const res = await fetch('/api/categorize-run');
-      if (res.ok) {
-        alert("¡Categorización automática exitosa!");
-        await fetchProducts();
-      } else {
-        alert("Hubo un problema con la categorización");
-      }
+      const res = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notice: value })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'No se pudo guardar');
+      setNotice(data.notice);
+      setNoticeStatus(data.notice ? "Aviso publicado en la tienda." : "Aviso quitado de la tienda.");
     } catch (err) {
-      alert("Error: " + String(err));
-    } finally {
-      setIsLoading(false);
+      setNoticeStatus(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordStatus(null);
+    if (passwordForm.next !== passwordForm.repeat) {
+      setPasswordStatus({ ok: false, text: "Las contraseñas nuevas no coinciden." });
+      return;
+    }
+    try {
+      const res = await fetch('/api/auth', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPassword: passwordForm.current, newPassword: passwordForm.next })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'No se pudo cambiar la contraseña');
+      setPasswordForm({ current: "", next: "", repeat: "" });
+      setPasswordStatus({ ok: true, text: "Contraseña actualizada." });
+    } catch (err) {
+      setPasswordStatus({ ok: false, text: err instanceof Error ? err.message : String(err) });
     }
   };
 
@@ -390,7 +429,7 @@ export default function AdminDashboard() {
         const workbook = xlsx.read(new Uint8Array(arrayBuffer), { type: "array" });
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
-        const json = xlsx.utils.sheet_to_json(worksheet) as Record<string, any>[];
+        const json = xlsx.utils.sheet_to_json(worksheet) as Record<string, unknown>[];
 
         if (json.length === 0) {
           alert("El archivo Excel está vacío.");
@@ -448,6 +487,9 @@ export default function AdminDashboard() {
     return matchesSearch && matchesCat;
   });
 
+  const knownCategories = new Set(categories.map(c => c.name));
+  const uncategorizedCount = products.filter(p => !knownCategories.has(p.category)).length;
+
   // Finance Calculations
   const totalCapital = products.reduce((sum, p) => sum + (Number(p.cost || 0) * Number(p.stock || 0)), 0);
   const potentialProfit = products.reduce((sum, p) => {
@@ -479,20 +521,34 @@ export default function AdminDashboard() {
               <Lock className="w-6 h-6" />
             </div>
             <h1 className="text-xl font-bold text-zinc-900">Panel de Control</h1>
-            <p className="text-xs text-zinc-500">Ingresa la contraseña requerida para administrar</p>
+            <p className="text-xs text-zinc-500">Ingresá con tu usuario y contraseña para administrar la tienda</p>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-4">
-            <div>
+            <label className="block text-xs font-medium text-zinc-700">
+              Usuario
               <input
-                type="password"
-                placeholder="Contraseña del panel"
-                value={passwordInput}
-                onChange={(e) => setPasswordInput(e.target.value)}
-                className="w-full px-4 py-3 border border-zinc-300 rounded-xl focus:ring-2 focus:ring-zinc-900 outline-none text-center text-lg"
+                type="text"
+                required
+                autoComplete="username"
+                autoCapitalize="none"
+                value={usernameInput}
+                onChange={(e) => setUsernameInput(e.target.value)}
+                className="mt-1 w-full px-4 py-3 border border-zinc-300 rounded-xl focus:ring-2 focus:ring-zinc-900 outline-none text-base"
                 autoFocus
               />
-            </div>
+            </label>
+            <label className="block text-xs font-medium text-zinc-700">
+              Contraseña
+              <input
+                type="password"
+                required
+                autoComplete="current-password"
+                value={passwordInput}
+                onChange={(e) => setPasswordInput(e.target.value)}
+                className="mt-1 w-full px-4 py-3 border border-zinc-300 rounded-xl focus:ring-2 focus:ring-zinc-900 outline-none text-base"
+              />
+            </label>
 
             {authError && (
               <p className="text-xs text-red-600 text-center font-medium bg-red-50 p-2.5 rounded-lg border border-red-100">{authError}</p>
@@ -500,9 +556,10 @@ export default function AdminDashboard() {
 
             <button
               type="submit"
-              className="w-full py-3 bg-zinc-900 hover:bg-zinc-800 text-white font-semibold rounded-xl transition-colors shadow-sm text-sm"
+              disabled={isLoggingIn}
+              className="w-full py-3 bg-zinc-900 hover:bg-zinc-800 text-white font-semibold rounded-xl transition-colors shadow-sm text-sm disabled:opacity-60"
             >
-              Ingresar al Panel
+              {isLoggingIn ? 'Ingresando...' : 'Ingresar al Panel'}
             </button>
           </form>
         </div>
@@ -546,7 +603,22 @@ export default function AdminDashboard() {
               >
                 <Layers className="w-3.5 h-3.5" /> Categorías
               </button>
+              <button
+                onClick={() => setActiveTab('settings')}
+                className={`px-3.5 py-1.5 rounded-lg font-medium text-xs transition-colors flex items-center gap-1.5 ${activeTab === 'settings' ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-600 hover:text-zinc-900'}`}
+              >
+                <Settings className="w-3.5 h-3.5" /> Ajustes
+              </button>
             </div>
+
+            <a
+              href="/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 rounded-lg transition-colors"
+            >
+              <ExternalLink className="w-3.5 h-3.5" /> Ver tienda
+            </a>
 
             <button
               onClick={handleLogout}
@@ -634,7 +706,7 @@ export default function AdminDashboard() {
                           <tr key={p.id} className="hover:bg-zinc-50 transition-colors">
                             <td className="px-5 py-3">
                               <div className="flex items-center gap-3">
-                                {p.image && p.image !== "https://via.placeholder.com/300" ? (
+                                {p.image && !p.image.includes("via.placeholder.com") ? (
                                   <img src={p.image} alt={p.name} className="w-9 h-9 rounded-lg object-cover border border-zinc-200 shrink-0" />
                                 ) : (
                                   <div className="w-9 h-9 rounded-lg bg-zinc-100 flex items-center justify-center border border-zinc-200 shrink-0">
@@ -755,36 +827,112 @@ export default function AdminDashboard() {
             {/* CATEGORIES TAB */}
             {activeTab === 'categories' && (
               <div className="space-y-6">
-                <div className="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-zinc-200">
-                  <h2 className="text-sm font-semibold text-zinc-900">Categorías ({categories.length})</h2>
-                  <div className="flex space-x-2">
-                    <button
-                      onClick={handleAutoCategorize}
-                      className="flex items-center px-3 py-1.5 bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 transition-colors font-medium text-xs"
-                    >
-                      <RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Auto Categorizar
-                    </button>
-                  </div>
+                <div className="bg-white p-4 rounded-xl shadow-sm border border-zinc-200">
+                  <h2 className="text-sm font-semibold text-zinc-900">Árbol de categorías</h2>
+                  <p className="text-xs text-zinc-500 mt-1">
+                    Es el mismo menú que ve el cliente en la tienda. Para mover un producto de categoría, editalo desde la pestaña Productos.
+                  </p>
+                  {uncategorizedCount > 0 && (
+                    <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg p-2.5 mt-3">
+                      Hay {uncategorizedCount} {uncategorizedCount === 1 ? 'producto' : 'productos'} con una categoría que no está en el árbol: no aparecen en ninguna categoría del menú (sí en “Todos los productos” y en el buscador).
+                    </p>
+                  )}
                 </div>
 
                 <div className="bg-white rounded-xl shadow-sm border border-zinc-200 overflow-hidden">
                   <table className="w-full text-xs text-left">
                     <thead className="text-[11px] text-zinc-500 uppercase bg-zinc-50 border-b border-zinc-200">
                       <tr>
-                        <th className="px-5 py-3">Nombre</th>
-                        <th className="px-5 py-3">Slug</th>
+                        <th className="px-5 py-3">Categoría</th>
+                        <th className="px-5 py-3 text-right">Productos</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-100">
-                      {categories.map((c) => (
-                        <tr key={c.id} className="hover:bg-zinc-50">
-                          <td className="px-5 py-3 font-medium text-zinc-900">{c.name}</td>
-                          <td className="px-5 py-3 text-zinc-500">{c.slug}</td>
-                        </tr>
+                      {CATEGORY_TREE.map((parent) => (
+                        <React.Fragment key={parent.slug}>
+                          <tr className="bg-zinc-50/60">
+                            <td className="px-5 py-3 font-semibold text-zinc-900">{parent.name}</td>
+                            <td className="px-5 py-3 text-right font-semibold text-zinc-900">
+                              {products.filter(p => p.category === parent.name || p.category.startsWith(`${parent.name} > `)).length}
+                            </td>
+                          </tr>
+                          {parent.children.map((child) => {
+                            const label = categoryLabel({ parent, child });
+                            return (
+                              <tr key={child.slug} className="hover:bg-zinc-50">
+                                <td className="px-5 py-2.5 pl-10 text-zinc-600">{child.name}</td>
+                                <td className="px-5 py-2.5 text-right text-zinc-600">{products.filter(p => p.category === label).length}</td>
+                              </tr>
+                            );
+                          })}
+                        </React.Fragment>
                       ))}
                     </tbody>
                   </table>
                 </div>
+              </div>
+            )}
+
+            {/* SETTINGS TAB */}
+            {activeTab === 'settings' && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+                <div className="bg-white p-5 rounded-xl shadow-sm border border-zinc-200 space-y-4">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2.5 bg-zinc-100 text-zinc-900 rounded-lg"><Megaphone className="w-5 h-5" /></div>
+                    <div>
+                      <h2 className="text-sm font-semibold text-zinc-900">Aviso de la tienda</h2>
+                      <p className="text-xs text-zinc-500 mt-0.5">
+                        Aparece arriba de todo en la tienda, debajo de la bienvenida. Sirve para avisos del día, por ejemplo: “Mañana hago entregas en el Campus Roca”.
+                      </p>
+                    </div>
+                  </div>
+                  <textarea
+                    value={notice}
+                    onChange={(e) => { setNotice(e.target.value); setNoticeStatus(""); }}
+                    maxLength={160}
+                    rows={3}
+                    placeholder="Escribí el aviso (dejalo vacío para no mostrar nada)"
+                    className="w-full px-3 py-2 border border-zinc-200 rounded-lg outline-none focus:ring-2 focus:ring-zinc-900 text-sm"
+                  />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button onClick={() => handleSaveNotice(notice)} className="px-4 py-2 bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 font-medium text-xs flex items-center gap-1.5">
+                      <Save className="w-3.5 h-3.5" /> Publicar aviso
+                    </button>
+                    <button onClick={() => handleSaveNotice("")} className="px-3.5 py-2 text-zinc-600 hover:bg-zinc-100 rounded-lg font-medium text-xs">
+                      Quitar aviso
+                    </button>
+                    <span className="text-[11px] text-zinc-400 ml-auto">{notice.length}/160</span>
+                  </div>
+                  {noticeStatus && <p className="text-xs text-zinc-600" role="status">{noticeStatus}</p>}
+                </div>
+
+                <form onSubmit={handleChangePassword} className="bg-white p-5 rounded-xl shadow-sm border border-zinc-200 space-y-4">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2.5 bg-zinc-100 text-zinc-900 rounded-lg"><KeyRound className="w-5 h-5" /></div>
+                    <div>
+                      <h2 className="text-sm font-semibold text-zinc-900">Cambiar contraseña</h2>
+                      <p className="text-xs text-zinc-500 mt-0.5">Usuario: <span className="font-semibold text-zinc-700">{currentUser}</span>. Mínimo 8 caracteres.</p>
+                    </div>
+                  </div>
+                  <label className="block text-xs font-medium text-zinc-700">
+                    Contraseña actual
+                    <input type="password" required autoComplete="current-password" value={passwordForm.current} onChange={(e) => setPasswordForm(f => ({ ...f, current: e.target.value }))} className="mt-1 w-full px-3 py-2 border border-zinc-200 rounded-lg outline-none focus:ring-2 focus:ring-zinc-900 text-sm" />
+                  </label>
+                  <label className="block text-xs font-medium text-zinc-700">
+                    Contraseña nueva
+                    <input type="password" required minLength={8} autoComplete="new-password" value={passwordForm.next} onChange={(e) => setPasswordForm(f => ({ ...f, next: e.target.value }))} className="mt-1 w-full px-3 py-2 border border-zinc-200 rounded-lg outline-none focus:ring-2 focus:ring-zinc-900 text-sm" />
+                  </label>
+                  <label className="block text-xs font-medium text-zinc-700">
+                    Repetir contraseña nueva
+                    <input type="password" required minLength={8} autoComplete="new-password" value={passwordForm.repeat} onChange={(e) => setPasswordForm(f => ({ ...f, repeat: e.target.value }))} className="mt-1 w-full px-3 py-2 border border-zinc-200 rounded-lg outline-none focus:ring-2 focus:ring-zinc-900 text-sm" />
+                  </label>
+                  <button type="submit" className="px-4 py-2 bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 font-medium text-xs flex items-center gap-1.5">
+                    <Save className="w-3.5 h-3.5" /> Guardar contraseña
+                  </button>
+                  {passwordStatus && (
+                    <p className={`text-xs p-2.5 rounded-lg border ${passwordStatus.ok ? 'text-emerald-700 bg-emerald-50 border-emerald-100' : 'text-red-600 bg-red-50 border-red-100'}`} role="status">{passwordStatus.text}</p>
+                  )}
+                </form>
               </div>
             )}
           </>

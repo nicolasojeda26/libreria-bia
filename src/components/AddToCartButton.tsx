@@ -1,129 +1,126 @@
 "use client";
 
+import Link from "next/link";
+import { Check, Minus, Plus } from "lucide-react";
 import { useState } from "react";
-import { ShoppingCart, Check, Minus, Plus } from "lucide-react";
-import { useCartStore } from "@/store/cartStore";
-import { Product, ProductAttribute } from "@/types/product";
 import { getColorHex } from "@/lib/colors";
+import { formatPrice } from "@/lib/site";
+import { useCartStore } from "@/store/cartStore";
+import type { PublicProduct } from "@/types/product";
 
-interface AddToCartButtonProps {
-  product: Product;
-}
-
-export default function AddToCartButton({ product }: AddToCartButtonProps) {
+export default function AddToCartButton({ product }: { product: PublicProduct }) {
   const [quantity, setQuantity] = useState(1);
   const [added, setAdded] = useState(false);
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
-  const addItem = useCartStore(state => state.addItem);
+  const [needsColor, setNeedsColor] = useState(false);
+  const addItem = useCartStore((state) => state.addItem);
 
-  const colorAttr = product.attributes?.find(
-    (a) => a.name.toLowerCase() === "color"
-  );
+  const colorAttr = product.attributes?.find((attr) => attr.name.toLowerCase() === "color" && attr.values.length > 0);
+  const selectedVariant = selectedColor && colorAttr ? colorAttr.values.find((item) => item.value === selectedColor) : null;
 
-  const selectedVariant = selectedColor && colorAttr
-    ? colorAttr.values.find((v) => v.value === selectedColor)
-    : null;
-
-  const price = selectedVariant?.price ?? product.discountPrice ?? product.price;
+  const price = selectedVariant?.price || (product.discountPrice ?? product.price);
   const stock = selectedVariant?.stock ?? product.stock;
-  const outOfStock = stock <= 0;
 
-  const handleAddToCart = () => {
-    if (colorAttr && !selectedColor) return;
-    addItem({
-      id: product.id,
-      name: product.name,
-      price: price,
-      image: product.image,
-      stock: stock,
-      quantity: quantity,
-      selectedColor: selectedColor || undefined,
-    });
-    setAdded(true);
-    setTimeout(() => setAdded(false), 2000);
-  };
-
-  if (outOfStock) {
+  if (product.stock <= 0) {
     return (
-      <button 
-        disabled
-        className="w-full flex items-center justify-center py-3.5 rounded-xl font-semibold text-sm bg-blue-100 text-blue-400 cursor-not-allowed"
-      >
+      <p className="btn-outline w-full cursor-default" role="status">
         Sin stock
-      </button>
+      </p>
     );
   }
 
+  const handleAddToCart = () => {
+    if (colorAttr && !selectedColor) {
+      setNeedsColor(true);
+      return;
+    }
+    addItem({ id: product.id, name: product.name, price, image: product.image, stock, quantity, selectedColor: selectedColor || undefined });
+    setAdded(true);
+    window.setTimeout(() => setAdded(false), 2500);
+  };
+
   return (
-    <div className="flex flex-col gap-3 w-full">
-      {/* Selector de color */}
+    <div className="flex w-full flex-col gap-5">
       {colorAttr && (
-        <div className="flex flex-col gap-2">
-          <span className="text-xs font-semibold text-blue-700">
-            Color: <span className="font-normal text-blue-500">{selectedColor || "Elegir"}</span>
-          </span>
-          <div className="flex flex-wrap gap-2">
-            {colorAttr.values.map((v) => {
-              const hex = getColorHex(v.value);
-              const isSelected = selectedColor === v.value;
-              const variantOOS = v.stock <= 0;
+        <fieldset>
+          <legend className="text-[15px] font-bold">
+            Color: <span className="font-normal">{selectedColor ?? "elegí uno"}</span>
+          </legend>
+          <div className="mt-2.5 flex flex-wrap gap-2">
+            {colorAttr.values.map((item) => {
+              const isSelected = selectedColor === item.value;
+              const unavailable = item.stock <= 0;
               return (
                 <button
-                  key={v.value}
-                  onClick={() => !variantOOS && setSelectedColor(v.value)}
-                  disabled={variantOOS}
-                  className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border-2 transition-all ${
+                  key={item.value}
+                  type="button"
+                  aria-pressed={isSelected}
+                  disabled={unavailable}
+                  onClick={() => {
+                    setSelectedColor(item.value);
+                    setQuantity(1);
+                    setNeedsColor(false);
+                  }}
+                  className={`flex min-h-11 items-center gap-2 rounded-[20px] border px-3.5 text-sm font-medium transition-colors duration-150 ${
                     isSelected
-                      ? "border-blue-500 bg-blue-50 text-blue-800 shadow-sm"
-                      : variantOOS
-                        ? "border-blue-100 bg-blue-50/30 text-blue-300 opacity-50 cursor-not-allowed"
-                        : "border-blue-100 bg-white text-blue-700 hover:border-blue-300 hover:bg-blue-50"
+                      ? "border-brand bg-brand text-white"
+                      : unavailable
+                        ? "cursor-not-allowed border-line bg-page text-[#8a8a8a] line-through"
+                        : "border-[#bdbdbd] bg-white text-ink hover:border-brand"
                   }`}
                 >
-                  <span
-                    className="w-4 h-4 rounded-full border border-blue-200 shrink-0"
-                    style={{ backgroundColor: hex }}
-                  />
-                  {v.value}
+                  <span className="size-4 shrink-0 rounded-full border border-black/15" style={{ backgroundColor: getColorHex(item.value) }} aria-hidden="true" />
+                  {item.value}
                 </button>
               );
             })}
           </div>
-        </div>
+          {needsColor && (
+            <p className="mt-2 text-sm font-medium text-[#b3261e]" role="alert">
+              Elegí un color para agregarlo al carrito.
+            </p>
+          )}
+        </fieldset>
       )}
 
-      {/* Selector de cantidad */}
-      <div className="flex items-center justify-between border border-blue-200 rounded-xl h-11 px-3 bg-white">
-        <button 
-          onClick={() => setQuantity(Math.max(1, quantity - 1))}
-          className="p-1 text-blue-400 hover:text-blue-700 transition-colors"
-        >
-          <Minus className="w-4 h-4" />
-        </button>
-        <span className="font-semibold text-sm w-8 text-center">{quantity}</span>
-        <button 
-          onClick={() => setQuantity(Math.min(stock, quantity + 1))}
-          className="p-1 text-blue-400 hover:text-blue-700 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-        </button>
+      {selectedVariant && selectedVariant.price > 0 && selectedVariant.price !== (product.discountPrice ?? product.price) && (
+        <p className="text-[15px]">
+          Precio de este color: <strong>{formatPrice(selectedVariant.price)}</strong>
+        </p>
+      )}
+
+      <div className="flex items-center gap-4">
+        <span className="text-[15px] font-bold" id="cantidad-label">
+          Cantidad
+        </span>
+        <div className="flex items-center rounded-[20px] border border-ink bg-white" role="group" aria-labelledby="cantidad-label">
+          <button type="button" aria-label="Restar uno" onClick={() => setQuantity(Math.max(1, quantity - 1))} disabled={quantity <= 1} className="flex size-11 items-center justify-center disabled:opacity-30">
+            <Minus className="size-4" aria-hidden="true" />
+          </button>
+          <span className="w-8 text-center text-base font-bold" aria-live="polite">
+            {quantity}
+          </span>
+          <button type="button" aria-label="Sumar uno" onClick={() => setQuantity(Math.min(stock, quantity + 1))} disabled={quantity >= stock} className="flex size-11 items-center justify-center disabled:opacity-30">
+            <Plus className="size-4" aria-hidden="true" />
+          </button>
+        </div>
       </div>
 
-      {/* Botón Agregar */}
-      <button 
-        onClick={handleAddToCart}
-        disabled={colorAttr && !selectedColor}
-        className={`w-full flex items-center justify-center py-3.5 rounded-xl font-semibold text-sm transition-all ${
-          added
-            ? 'bg-emerald-400 text-white'
-            : colorAttr && !selectedColor
-              ? 'bg-blue-200 text-blue-400 cursor-not-allowed'
-              : 'bg-blue-600 hover:bg-blue-700 text-white'
-        }`}
-      >
-        {added ? <Check className="w-4 h-4 mr-2" /> : <ShoppingCart className="w-4 h-4 mr-2" />}
-        {added ? '¡Agregado!' : 'Agregar al carrito'}
+      <button type="button" onClick={handleAddToCart} className="btn-pill w-full !min-h-[50px] !text-[0.9rem]">
+        {added ? (
+          <>
+            <Check className="size-4" aria-hidden="true" /> Agregado al carrito
+          </>
+        ) : (
+          "Agregar al carrito"
+        )}
       </button>
+
+      {added && (
+        <Link href="/carrito" className="animate-fade-in text-center text-[15px] font-bold text-brand underline">
+          Ver carrito y finalizar compra
+        </Link>
+      )}
     </div>
   );
 }

@@ -1,25 +1,34 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
-import Header from "@/components/Header";
-import Footer from "@/components/Footer";
+import { Literata, Poppins } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
-const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
+const poppins = Poppins({ variable: "--font-poppins", subsets: ["latin"], weight: ["300", "400", "500", "700"], display: "swap" });
+const literata = Literata({ variable: "--font-literata", subsets: ["latin"], weight: ["400", "500", "700"], display: "swap" });
+
+const siteUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL
+  ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+  : "http://localhost:3000";
 
 export const metadata: Metadata = {
-  title: "Librería Bia — Papelería que inspira",
-  description: "Descubrí útiles, papelería y artículos de oficina seleccionados para hacer tus ideas realidad.",
+  metadataBase: new URL(siteUrl),
+  title: {
+    default: "Tienda online de Librería Bia",
+    template: "%s | Librería Bia",
+  },
+  description: "Esta es la tienda online de Librería Bia. Ingresá y conocé nuestra amplia variedad de productos.",
+  openGraph: {
+    title: "Tienda online de Librería Bia",
+    description: "Esta es la tienda online de Librería Bia. Ingresá y conocé nuestra amplia variedad de productos.",
+    images: ["/logo.jpg"],
+    type: "website",
+    locale: "es_AR",
+  },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="es" className={`${geistSans.variable} ${geistMono.variable} bg-[#faf8f6] antialiased`}>
-      <body className="min-h-screen bg-[#faf8f6] font-sans text-[#1c1917]">
-        <Header />
-        <main>{children}</main>
-        <Footer />
-      </body>
+    <html lang="es" className={`${poppins.variable} ${literata.variable} antialiased`}>
+      <body className="min-h-screen">{children}</body>
     </html>
   );
 }

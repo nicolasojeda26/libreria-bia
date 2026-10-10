@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server';
+import { getAdminUser, unauthorized } from '@/lib/auth';
 
 const MAX_SIZE = 5 * 1024 * 1024; // 5MB
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
 export async function POST(request: Request) {
+  if (!(await getAdminUser())) return unauthorized();
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File;
@@ -27,7 +29,7 @@ export async function POST(request: Request) {
     const dataUrl = `data:${mimeType};base64,${base64}`;
 
     return NextResponse.json({ url: dataUrl });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Error al subir la imagen' }, { status: 500 });
   }
 }

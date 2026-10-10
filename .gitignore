@@ -42,3 +42,8 @@ next-env.d.ts
 
 .vercel
 .env*
+
+# datos locales del panel (solo se usan sin base de datos)
+/data/admin-users.json
+/data/settings.json
+/data/categories.json

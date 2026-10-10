@@ -1,27 +1,26 @@
 "use client";
 
-import { ShoppingCart } from "lucide-react";
+import { ShoppingBag } from "lucide-react";
 import Link from "next/link";
+import { useHydrated } from "@/lib/useHydrated";
 import { useCartStore } from "@/store/cartStore";
-import { useEffect, useState } from "react";
 
 export default function CartIcon() {
-  const [mounted, setMounted] = useState(false);
+  // El carrito vive en localStorage: recién se muestra el número ya hidratado.
+  const hydrated = useHydrated();
   const totalItems = useCartStore((state) => state.getTotalItems());
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => setMounted(true), 0);
-    return () => window.clearTimeout(timer);
-  }, []);
+  const count = hydrated ? totalItems : 0;
 
   return (
-    <Link href="/carrito" className="relative flex items-center gap-1.5 group text-[#ff6b4a] hover:text-[#e8572f] transition-colors">
-      <ShoppingCart className="w-5 h-5" />
-      {mounted && totalItems > 0 && (
-        <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#ff6b4a] text-[10px] font-bold text-white px-1">
-          {totalItems}
-        </span>
-      )}
+    <Link
+      href="/carrito"
+      aria-label={count > 0 ? `Ver carrito, ${count} ${count === 1 ? "producto" : "productos"}` : "Ver carrito"}
+      className="relative flex size-11 items-center justify-center text-ink"
+    >
+      <ShoppingBag className="size-6" strokeWidth={1.75} aria-hidden="true" />
+      <span className="absolute right-0 top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-brand px-1 text-[10px] font-bold leading-none text-white">
+        {count}
+      </span>
     </Link>
   );
 }

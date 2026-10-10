@@ -5,13 +5,15 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       {
         protocol: 'https',
-        hostname: 'via.placeholder.com',
-      },
-      {
-        protocol: 'https',
         hostname: 'd22fxaf9t8d39k.cloudfront.net',
       },
     ],
+  },
+  async redirects() {
+    return [
+      // Dirección del catálogo anterior
+      { source: '/libreria', destination: '/productos', permanent: true },
+    ];
   },
 };
 

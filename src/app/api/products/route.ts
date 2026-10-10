@@ -1,28 +1,10 @@
 import { NextResponse } from 'next/server';
-import { createTable, clearProducts, insertProduct, getProducts, Product } from '@/lib/db';
-import { ProductAttribute } from '@/types/product';
+import { clearProducts, insertProduct, getProducts, Product } from '@/lib/db';
+import { getAdminUser, unauthorized } from '@/lib/auth';
+import { parseFormattedNumber } from '@/lib/numbers';
+import { ProductAttribute, toPublicProduct } from '@/types/product';
 
-export function parseFormattedNumber(val: any): number {
-  if (val === null || val === undefined || val === '') return 0;
-  if (typeof val === 'number') return isNaN(val) ? 0 : val;
-  
-  let str = String(val).trim().replace(/[$]/g, '');
-  
-  if (str.includes(',') && str.includes('.')) {
-    if (str.indexOf('.') < str.indexOf(',')) {
-      str = str.replace(/\./g, '').replace(',', '.');
-    } else {
-      str = str.replace(/,/g, '');
-    }
-  } else if (str.includes(',')) {
-    str = str.replace(',', '.');
-  }
-
-  const parsed = parseFloat(str);
-  return isNaN(parsed) ? 0 : parsed;
-}
-
-function pick(raw: Record<string, any>, keys: string[]): any {
+function pick(raw: Record<string, unknown>, keys: string[]): unknown {
   for (const k of keys) {
     const v = raw[k];
     if (v !== undefined && v !== null && v !== '') return v;
@@ -32,34 +14,35 @@ function pick(raw: Record<string, any>, keys: string[]): any {
 
 export async function GET() {
   try {
-    await createTable();
     const products = await getProducts();
-    return NextResponse.json(products);
-  } catch (error) {
+    // El costo es un dato interno: solo lo ve el panel con la sesión iniciada.
+    if (await getAdminUser()) return NextResponse.json(products);
+    return NextResponse.json(products.map(toPublicProduct));
+  } catch {
     return NextResponse.json({ error: 'Failed to fetch products' }, { status: 500 });
   }
 }
 
 export async function DELETE() {
+  if (!(await getAdminUser())) return unauthorized();
   try {
-    await createTable();
     await clearProducts();
     return NextResponse.json({ message: 'All products deleted successfully' });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Failed to clear products' }, { status: 500 });
   }
 }
 
 export async function POST(request: Request) {
+  if (!(await getAdminUser())) return unauthorized();
   try {
     const url = new URL(request.url);
     // ?replace=1 borra todo antes de insertar (primer lote de la importación).
     // Sin el parámetro solo hace upsert (lotes siguientes).
     const replace = url.searchParams.get('replace') === '1';
 
-    const rawProducts: Record<string, any>[] = await request.json();
-    
-    await createTable();
+    const rawProducts: Record<string, unknown>[] = await request.json();
+
     if (replace) {
       await clearProducts();
     }
@@ -87,7 +70,7 @@ export async function POST(request: Request) {
         discountPrice: discountVal ? parseFormattedNumber(discountVal) : undefined,
         stock: stockVal,
         category: String(catVal || "General"),
-        image: String(imgVal || "https://via.placeholder.com/300"),
+        image: String(imgVal || ""),
         attributes: Array.isArray(attrsVal) && attrsVal.length > 0 ? attrsVal : undefined,
       };
 
