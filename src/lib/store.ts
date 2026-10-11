@@ -1,9 +1,28 @@
-import { getProducts as getDbProducts } from '@/lib/db';
+import { cache } from 'react';
+import { getProducts as getDbProducts, getSetting, setSetting } from '@/lib/db';
 import { getProducts as getSheetProducts } from '@/lib/google-sheets';
-import { normalizeKey, resolveCategory, type ResolvedCategory } from '@/lib/categories';
+import {
+  DEFAULT_CATEGORY_TREE,
+  canonicalCategory,
+  normalizeKey,
+  parseStoredTree,
+  resolveCategory,
+  type CategoryTree,
+  type ResolvedCategory,
+} from '@/lib/categories';
 import type { Product, ProductCardData } from '@/types/product';
 
 export const PAGE_SIZE = 24;
+const CATEGORIES_KEY = 'categories';
+
+/** Árbol de categorías: el guardado desde el panel o, si no hay, el inicial. */
+export const getCategoryTree = cache(async (): Promise<CategoryTree> => {
+  return parseStoredTree(await getSetting(CATEGORIES_KEY)) ?? DEFAULT_CATEGORY_TREE;
+});
+
+export async function saveCategoryTree(tree: CategoryTree) {
+  await setSetting(CATEGORIES_KEY, JSON.stringify(tree));
+}
 
 function byNewest(a: Product, b: Product): number {
   // Los códigos son correlativos: el más alto es el producto más nuevo.
@@ -13,11 +32,16 @@ function byNewest(a: Product, b: Product): number {
   return a.name.localeCompare(b.name);
 }
 
+/** Deja la categoría de cada producto con el nombre actual del árbol. */
+export function withCanonicalCategories(products: Product[], tree: CategoryTree): Product[] {
+  return products.map((product) => ({ ...product, category: canonicalCategory(tree, product.category) }));
+}
+
 /** Todos los productos de la tienda, del más nuevo al más viejo. */
 export async function getStoreProducts(): Promise<Product[]> {
   let products = await getDbProducts();
   if (products.length === 0) products = await getSheetProducts();
-  return [...products].sort(byNewest);
+  return withCanonicalCategories(products, await getCategoryTree()).sort(byNewest);
 }
 
 export function hasVariants(product: Product): boolean {
@@ -36,9 +60,9 @@ export function toCardData(product: Product): ProductCardData {
   };
 }
 
-export function filterByCategory(products: Product[], category: ResolvedCategory): Product[] {
+export function filterByCategory(products: Product[], tree: CategoryTree, category: ResolvedCategory): Product[] {
   return products.filter((product) => {
-    const resolved = resolveCategory(product.category);
+    const resolved = resolveCategory(tree, product.category);
     if (!resolved || resolved.parent.slug !== category.parent.slug) return false;
     return category.child ? resolved.child?.slug === category.child.slug : true;
   });

@@ -6,7 +6,7 @@ import Link from "next/link";
 import { ChevronDown, Menu, Search, X } from "lucide-react";
 import { Fragment, useEffect, useRef, useState } from "react";
 import CartIcon from "./CartIcon";
-import { CATEGORY_TREE, categoryHref } from "@/lib/categories";
+import { categoryHref, type CategoryTree } from "@/lib/categories";
 
 /** Permite cortar los nombres largos después de cada barra ("Lápices/Portaminas/…"). */
 function Breakable({ text }: { text: string }) {
@@ -43,7 +43,7 @@ function SearchForm({ id, onSubmit, autoFocus }: { id: string; onSubmit?: () => 
   );
 }
 
-export default function Header() {
+export default function Header({ categories }: { categories: CategoryTree }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -128,7 +128,7 @@ export default function Header() {
                     <span className="text-xs font-bold uppercase text-muted">(Ver todo)</span>
                   </Link>
                   <div className="mt-6 columns-4 gap-8">
-                    {CATEGORY_TREE.map((parent) => (
+                    {categories.map((parent) => (
                       <div key={parent.slug} className="mb-5 break-inside-avoid">
                         <Link href={categoryHref(parent)} onClick={closeAll} className="block py-1 text-sm font-bold leading-snug text-ink hover:text-brand">
                           <Breakable text={parent.name} />
@@ -214,7 +214,7 @@ export default function Header() {
                 Artículos <span className="ml-2 text-xs text-muted">(Ver todo)</span>
               </Link>
               <ul className="border-y border-line py-2">
-                {CATEGORY_TREE.map((parent) => {
+                {categories.map((parent) => {
                   const isOpen = expanded === parent.slug;
                   const hasChildren = parent.children.length > 0;
                   return (

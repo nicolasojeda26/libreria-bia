@@ -8,6 +8,7 @@ import ProductImage from "@/components/ProductImage";
 import { categoryHref, resolveCategory } from "@/lib/categories";
 import { getProductById } from "@/lib/db";
 import { DELIVERY_METHODS, formatPrice, hasRealImage, whatsappUrl } from "@/lib/site";
+import { getCategoryTree } from "@/lib/store";
 import { toPublicProduct } from "@/types/product";
 
 type Props = { params: Promise<{ id: string }> };
@@ -28,7 +29,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function ProductPage({ params }: Props) {
   const { id } = await params;
-  const found = await getProductById(id);
+  const [found, tree] = await Promise.all([getProductById(id), getCategoryTree()]);
   if (!found) notFound();
   // El costo se queda en el servidor: no se envía al navegador.
   const product = toPublicProduct(found);
@@ -38,7 +39,7 @@ export default async function ProductPage({ params }: Props) {
   const consultUrl = whatsappUrl(`¡Hola! Me interesa este producto: ${product.name} (${formatPrice(price)}). ¿Está disponible?`);
 
   const crumbs: Crumb[] = [{ label: "Inicio", href: "/" }];
-  const category = resolveCategory(product.category);
+  const category = resolveCategory(tree, product.category);
   if (category) {
     crumbs.push({ label: category.parent.name, href: categoryHref(category.parent) });
     if (category.child) crumbs.push({ label: category.child.name, href: categoryHref(category.parent, category.child) });

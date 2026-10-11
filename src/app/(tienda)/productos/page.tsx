@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import CategoryPills from "@/components/CategoryPills";
 import ProductGrid from "@/components/ProductGrid";
-import { CATEGORY_TREE, categoryHref } from "@/lib/categories";
-import { PAGE_SIZE, getStoreProducts, searchProducts, toCardData, visibleCount } from "@/lib/store";
+import { categoryHref } from "@/lib/categories";
+import { PAGE_SIZE, getCategoryTree, getStoreProducts, searchProducts, toCardData, visibleCount } from "@/lib/store";
 
 type Props = { searchParams: Promise<{ q?: string | string[]; ver?: string | string[] }> };
 
@@ -17,7 +17,7 @@ export default async function ProductsPage({ searchParams }: Props) {
   const params = await searchParams;
   const query = ((Array.isArray(params.q) ? params.q[0] : params.q) ?? "").trim().slice(0, 80);
 
-  const all = await getStoreProducts();
+  const [all, tree] = await Promise.all([getStoreProducts(), getCategoryTree()]);
   const matches = query ? searchProducts(all, query) : all;
   const count = visibleCount(params.ver, matches.length);
   const visible = matches.slice(0, count).map(toCardData);
@@ -28,7 +28,7 @@ export default async function ProductsPage({ searchParams }: Props) {
 
   const pills = [
     { label: "Todo", href: "/productos", active: !query },
-    ...CATEGORY_TREE.map((category) => ({ label: category.name, href: categoryHref(category) })),
+    ...tree.map((category) => ({ label: category.name, href: categoryHref(category) })),
   ];
 
   return (

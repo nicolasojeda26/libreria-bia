@@ -5,7 +5,7 @@ import Breadcrumb, { type Crumb } from "@/components/Breadcrumb";
 import CategoryPills from "@/components/CategoryPills";
 import ProductGrid from "@/components/ProductGrid";
 import { categoryHref, findCategoryBySlug } from "@/lib/categories";
-import { PAGE_SIZE, filterByCategory, getStoreProducts, toCardData, visibleCount } from "@/lib/store";
+import { PAGE_SIZE, filterByCategory, getCategoryTree, getStoreProducts, toCardData, visibleCount } from "@/lib/store";
 
 type Props = {
   params: Promise<{ slug: string[] }>;
@@ -14,18 +14,18 @@ type Props = {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  const category = findCategoryBySlug(slug);
+  const category = findCategoryBySlug(await getCategoryTree(), slug);
   if (!category) return { title: "Categoría no encontrada" };
   return { title: category.child ? `${category.child.name} · ${category.parent.name}` : category.parent.name };
 }
 
 export default async function CategoryPage({ params, searchParams }: Props) {
-  const [{ slug }, { ver }] = await Promise.all([params, searchParams]);
-  const category = findCategoryBySlug(slug);
+  const [{ slug }, { ver }, tree] = await Promise.all([params, searchParams, getCategoryTree()]);
+  const category = findCategoryBySlug(tree, slug);
   if (!category) notFound();
 
   const { parent, child } = category;
-  const matches = filterByCategory(await getStoreProducts(), category);
+  const matches = filterByCategory(await getStoreProducts(), tree, category);
   const count = visibleCount(ver, matches.length);
   const visible = matches.slice(0, count).map(toCardData);
   const selfHref = categoryHref(parent, child);

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Banknote, GraduationCap, House, Landmark, MapPin, Truck, Wallet } from "lucide-react";
 import { InstagramIcon, WhatsAppIcon } from "./Icons";
-import { CATEGORY_TREE, categoryHref } from "@/lib/categories";
+import { categoryHref, type CategoryTree } from "@/lib/categories";
 import { SITE, whatsappUrl } from "@/lib/site";
 
 const highlights = [
@@ -31,7 +31,7 @@ function Chip({ icon: Icon, label }: { icon: typeof Banknote; label: string }) {
   );
 }
 
-export default function Footer() {
+export default function Footer({ categories }: { categories: CategoryTree }) {
   const regretUrl = whatsappUrl("Hola Librería Bia, quiero solicitar la cancelación de una compra (botón de arrepentimiento).");
 
   return (
@@ -66,7 +66,7 @@ export default function Footer() {
         <div className="mx-auto max-w-[1340px] px-4 py-10 sm:px-6 lg:px-10">
           <h2 className="text-center font-serif text-2xl font-bold uppercase">Productos</h2>
           <ul className="mt-6 flex flex-wrap justify-center gap-x-2.5 gap-y-3">
-            {CATEGORY_TREE.map((category) => (
+            {categories.map((category) => (
               <li key={category.slug}>
                 <Link
                   href={categoryHref(category)}
